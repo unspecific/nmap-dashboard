@@ -15,6 +15,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const tabId = button.dataset.tab;
       const content = document.getElementById(`tab-${tabId}`);
       if (content) content.style.display = 'block';
+
+      if (tabId === 'hosts') {
+        initHostsTab();
+      }
     });
   });
 
@@ -189,4 +193,43 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     }
   }
+
+  let hostsTabInitialized = false;
+  const refreshBtn = document.getElementById("refresh-scan");
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", async e => {
+      e.preventDefault();
+      const date = document.getElementById("scan-date").value;
+      if (!date) return;
+
+      // refreshBtn.title = "Refreshing...";
+      refreshBtn.classList.remove("success", "error");
+
+      try {
+        const res = await fetch(`cgi-bin/get-scan-data.py?date=${date}&rebuild=true`);
+        const data = await res.json();
+
+        if (data.error) throw new Error(data.error);
+
+        refreshBtn.classList.add("success");
+        refreshBtn.title = "Cache refreshed!";
+      } catch (err) {
+        console.error("Refresh failed", err);
+        refreshBtn.classList.add("error");
+        refreshBtn.title = "Refresh failed!";
+      }
+
+      setTimeout(() => {
+        refreshBtn.classList.remove("success", "error");
+        refreshBtn.title = "Refresh scan cache";
+      }, 3000);
+
+      if (window.initHostsTab) {
+        window.hostsTabInitialized = false;
+        initHostsTab();
+      }
+    });
+  }
+
 });
