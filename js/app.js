@@ -51,10 +51,26 @@ document.addEventListener('DOMContentLoaded', () => {
       scanDateDropdown.value = scanDates[0];
       statusDate.textContent = formatDate(scanDates[0]);
 
-      loadSummaryForDate(scanDates[0]);
-      updatePortDistributionChart(scanDates[0]);
-      updatePortHostGraph(scanDates[0]);
-      updateServiceSankey(scanDates[0]);
+      loadAndCacheScanData(scanDates[0]).then(() => {
+        if (!window.cachedScanData) return;
+        loadSummaryForDate(scanDates[0]);
+        updatePortDistributionChartJS(scanDates[0]);
+        updateOSDistributionChartJS(scanDates[0]);
+        setupChartToggles();
+      });
+
+      loadAndCacheScanData(scanDates[0]).then(() => {
+      if (!window.cachedScanData) return;
+
+        loadSummaryForDate(scanDates[0]);
+        updatePortDistributionChartJS(scanDates[0]);
+        updateOSDistributionChartJS(scanDates[0]);
+        setupChartToggles();
+      });
+
+      // updatePortDistributionChart(scanDates[0]);
+      // updatePortHostGraph(scanDates[0]);
+      // updateServiceSankey(scanDates[0]);
     })
     .catch(err => {
       console.error("Error loading scan dates:", err);
@@ -78,6 +94,41 @@ document.addEventListener('DOMContentLoaded', () => {
       .catch(err => console.error("Failed to load summary:", err));
   }
 
+  function renderChartByType(containerId, data, type) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (type === "pie") {
+      window.renderSVGPieChart(container, data);
+    } else {
+      window.renderSVGBarChart(container, data);
+    }
+  }
+
+function setupChartToggles() {
+  document.querySelectorAll(".chart-toggle").forEach(select => {
+    const container = select.closest(".dashboard-card");
+    const chartId = container?.querySelector(".chart-object")?.id;
+
+    if (!chartId) return;
+
+    // Read preference
+    const savedType = getCookie(`chartType_${chartId}`);
+    if (savedType && select.value !== savedType) {
+      select.value = savedType;
+    }
+
+    select.addEventListener("change", () => {
+      const selectedType = select.value;
+      setCookie(`chartType_${chartId}`, selectedType);
+      rerenderChart(chartId, selectedType);  // You define this logic
+    });
+
+    // Initial render based on saved or default
+    rerenderChart(chartId, select.value);
+  });
+}
+
+
   // --- Update Port Bubble Chart ---
   function updatePortBubbleChart(date) {
     const container = document.getElementById("port-distribution");
@@ -87,7 +138,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const obj = document.createElement("object");
     obj.setAttribute("type", "image/svg+xml");
-    obj.setAttribute("data", `cgi-bin/port-bubbles.py?date=${date}`);
+    svg.removeAttribute("data");
+    svg.innerHTML = svgUrl;
     obj.setAttribute("width", "100%");
     obj.setAttribute("height", "200");
 
@@ -102,10 +154,17 @@ document.addEventListener('DOMContentLoaded', () => {
   scanDateDropdown.addEventListener('change', () => {
     const selectedDate = scanDateDropdown.value;
     statusDate.textContent = formatDate(selectedDate);
-    loadSummaryForDate(selectedDate);
-    updatePortDistributionChart(selectedDate);
-    updatePortHostGraph(selectedDate);
-    updateServiceSankey(selectedDate);
+    loadAndCacheScanData(selectedDate).then(() => {
+      if (!window.cachedScanData) return;
+        loadSummaryForDate(selectedDate);
+        updatePortDistributionChartJS(selectedDate);
+        updateOSDistributionChartJS(selectedDate);
+        setupChartToggles();
+    });
+
+    // updatePortDistributionChart(selectedDate);
+    // updatePortHostGraph(selectedDate);
+    // updateServiceSankey(selectedDate);
   });
 
   // --- Dark Mode Toggle ---
@@ -125,21 +184,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // --- Lightbox Logic ---
-  function openLightboxWithGraph(svgUrl, title = "Chart") {
-    const lightbox = document.getElementById("lightbox");
-    const svg = document.getElementById("lightbox-svg");
-    const titleElem = document.getElementById("lightbox-title");
+    function openLightboxWithGraph(svgContent, title = "Chart") {
+        const lightbox = document.getElementById("lightbox");
+        const svgContainer = document.getElementById("lightbox-svg");
+        const titleElem = document.getElementById("lightbox-title");
 
-    if (!lightbox || !svg || !titleElem) {
-      console.warn("Lightbox components missing in DOM.");
-      return;
+        if (!lightbox || !svgContainer || !titleElem) {
+        console.warn("Lightbox components missing in DOM.");
+        return;
+        }
+
+        // Create a temporary DOM element to parse the SVG string
+        const temp = document.createElement("div");
+        temp.innerHTML = svgContent;
+        const svg = temp.querySelector("svg");
+
+        if (svg) {
+        const vh = Math.round(window.innerHeight * 0.75);
+        svg.setAttribute("height", vh);
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+        // Center and add top/bottom padding
+        svg.style.display = "block";
+        svg.style.margin = "40px auto";
+
+        svgContainer.innerHTML = "";
+        svgContainer.appendChild(svg);
+        } else {
+        // Fallback: dump raw content if SVG wasn't found
+        svgContainer.innerHTML = svgContent;
+        }
+
+        titleElem.textContent = title;
+        lightbox.classList.remove("hidden");
     }
 
-    svg.setAttribute("data", svgUrl);
-    titleElem.textContent = title;
-    lightbox.classList.remove("hidden");
-  }
 
   document.querySelector('.lightbox-close')?.addEventListener('click', () => {
     document.getElementById('lightbox').classList.add('hidden');
@@ -155,16 +234,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // --- Port Host Graph ---
-  function updatePortHostGraph(date) {
-    const obj = document.getElementById("port-host-graph");
-    if (!obj) return;
+  window.openLightboxWithGraph = openLightboxWithGraph;
 
-    obj.setAttribute("data", `cgi-bin/port-host-graph.py?date=${date}`);
-    obj.onclick = () => {
-      openLightboxWithGraph(`cgi-bin/port-host-graph.py?date=${date}`, "Top 10 Port to Host");
-    };
-  }
 
   // --- Service Sankey ---
   function updateServiceSankey(date) {
@@ -180,19 +251,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // --- Port Distribution Chart ---
-  function updatePortDistributionChart(date) {
-    const chart = document.getElementById("port-chart");
-    if (!chart) return;
-
-    chart.setAttribute("data", `cgi-bin/port-distribution-chart.py?date=${date}`);
-    const overlay = chart.parentElement?.querySelector(".svg-click-overlay");
-    if (overlay) {
-      overlay.onclick = () => {
-        openLightboxWithGraph(`cgi-bin/port-distribution-chart.py?date=${date}`, "Top 10 Ports");
-      };
-    }
-  }
 
   let hostsTabInitialized = false;
   const refreshBtn = document.getElementById("refresh-scan");
@@ -232,4 +290,41 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function loadAndCacheScanData(date) {
+    return fetch(`cgi-bin/get-scan-data.py?date=${date}`)
+      .then(res => res.json())
+      .then(data => {
+        window.cachedScanData = data;
+    })
+    .catch(err => {
+      console.error("Failed to load scan data:", err);
+      window.cachedScanData = null;
+    });
+  }
+
 });
+
+
+function loadAndCacheScanData(date) {
+  return fetch(`cgi-bin/get-scan-data.py?date=${date}`)
+    .then(res => res.json())
+    .then(data => {
+      window.cachedScanData = data;
+    })
+    .catch(err => {
+      console.error("Failed to load scan data:", err);
+      window.cachedScanData = null;
+    });
+}
+
+function setCookie(name, value, days = 365) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/`;
+}
+
+function getCookie(name) {
+  return document.cookie.split('; ').reduce((r, v) => {
+    const parts = v.split('=');
+    return parts[0] === name ? decodeURIComponent(parts[1]) : r;
+  }, '');
+}

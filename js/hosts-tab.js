@@ -21,19 +21,6 @@ function renderHostsTable(hosts) {
   const headers = ["IP", "Hostname", "OS", "Port", "State", "Service", "Product", "Version"];
   const thead = table.createTHead();
 
-  // Add filter input row
-  const filterRow = thead.insertRow();
-  headers.forEach(() => {
-    const td = document.createElement("td");
-    const input = document.createElement("input");
-    input.type = "text";
-    input.placeholder = "Filter...";
-    input.style.width = "95%";
-    input.dataset.filter = "true";
-    td.appendChild(input);
-    filterRow.appendChild(td);
-  });
-
   // Add clickable sortable header row
   const headerRow = thead.insertRow();
   headers.forEach((header, index) => {
@@ -48,6 +35,19 @@ function renderHostsTable(hosts) {
       th.dataset.order = th.dataset.order === "asc" ? "desc" : "asc";
     });
     headerRow.appendChild(th);
+  });
+
+  // Add filter input row
+  const filterRow = thead.insertRow();
+  headers.forEach(() => {
+    const td = document.createElement("td");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "Filter...";
+    input.style.width = "95%";
+    input.dataset.filter = "true";
+    td.appendChild(input);
+    filterRow.appendChild(td);
   });
 
   const tbody = table.createTBody();
@@ -112,9 +112,23 @@ function renderHostsTable(hosts) {
         const value = cell?.textContent?.toLowerCase() || "";
         row.style.display = value.includes(query) ? "" : "none";
       });
+
+      const rows = Array.from(tbody.querySelectorAll("tr"));
+      let lastWasVisible = false;
+
+      for (const row of rows) {
+        const isSpacer = row.children.length === 1;
+        const isVisible = row.style.display !== "none";
+
+        if (isSpacer) {
+          row.style.display = lastWasVisible ? "" : "none";
+          lastWasVisible = false;
+        } else {
+          lastWasVisible = isVisible;
+        }
+      }
     });
   });
-
 
   document.querySelectorAll('.host-ip').forEach(el => {
     el.addEventListener('click', () => {
@@ -228,18 +242,19 @@ function sortTable(tbody, colIndex, ascending) {
 
   // Step 4: sort groups by first row's target column
   const sortedEntries = Object.entries(groups).sort(([, aRows], [, bRows]) => {
-  let cmp;
-  if (colIndex === 0) {
-    // Column 0 = IP, use numeric comparison
-    cmp = ipToNumber(aRows[0].cells[0].textContent.trim()) - 
-          ipToNumber(bRows[0].cells[0].textContent.trim());
-  } else {
-    // Regular string comparison
-    const aText = aRows[0].cells[colIndex]?.textContent.trim().toLowerCase() || "";
-    const bText = bRows[0].cells[colIndex]?.textContent.trim().toLowerCase() || "";
-    cmp = aText.localeCompare(bText);
-  }
-  return ascending ? cmp : -cmp;
+    let cmp;
+    if (colIndex === 0) {
+      // Column 0 = IP, use numeric comparison
+      const ipA = aRows[0].cells[0].querySelector('.host-ip')?.dataset.ip || "";
+      const ipB = bRows[0].cells[0].querySelector('.host-ip')?.dataset.ip || "";
+      cmp = ipToNumber(ipA) - ipToNumber(ipB);
+    } else {
+      // Regular string comparison
+      const aText = aRows[0].cells[colIndex]?.textContent.trim().toLowerCase() || "";
+      const bText = bRows[0].cells[colIndex]?.textContent.trim().toLowerCase() || "";
+      cmp = aText.localeCompare(bText);
+    }
+    return ascending ? cmp : -cmp;
   });
 
   // Step 5: re-add sorted rows + spacer
@@ -259,7 +274,7 @@ function sortTable(tbody, colIndex, ascending) {
 
 function ipToNumber(ip) {
   return ip.split('.')
-           .map(octet => parseInt(octet, 10))
-           .reduce((acc, octet) => (acc << 8) + octet);
+    .map(octet => parseInt(octet, 10))
+    .reduce((acc, octet) => (acc << 8) + octet);
 }
 
