@@ -318,7 +318,9 @@ body.dark-mode .dashboard-card h3 {
   flex-direction: column;
   position: relative;
   text-align: center;
+  overflow: hidden;
   /*width: 100%; */
+    border: 2px solid #f00;
 }
 
 .chart-object {
@@ -508,4 +510,10 @@ body.dark-mode .port-table td {
   max-width: 80px;
 }
 
+.dashboard-card .icon-button {
+  align-self: flex-start;
+  font-size: 0.9em;
+  padding: 0.25em 0.5em;
+  margin-bottom: 0.5em;
+}
 

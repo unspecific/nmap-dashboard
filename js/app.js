@@ -53,19 +53,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
       loadAndCacheScanData(scanDates[0]).then(() => {
         if (!window.cachedScanData) return;
-        loadSummaryForDate(scanDates[0]);
-        updatePortDistributionChartJS(scanDates[0]);
-        updateOSDistributionChartJS(scanDates[0]);
-        setupChartToggles();
-      });
-
-      loadAndCacheScanData(scanDates[0]).then(() => {
-      if (!window.cachedScanData) return;
 
         loadSummaryForDate(scanDates[0]);
         updatePortDistributionChartJS(scanDates[0]);
         updateOSDistributionChartJS(scanDates[0]);
-        setupChartToggles();
+        setupChartToggles(scanDates[0]);
       });
 
       // updatePortDistributionChart(scanDates[0]);
@@ -94,61 +86,27 @@ document.addEventListener('DOMContentLoaded', () => {
       .catch(err => console.error("Failed to load summary:", err));
   }
 
-  function renderChartByType(containerId, data, type) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    if (type === "pie") {
-      window.renderSVGPieChart(container, data);
-    } else {
-      window.renderSVGBarChart(container, data);
-    }
-  }
-
-function setupChartToggles() {
+function setupChartToggles(scanDate) {
   document.querySelectorAll(".chart-toggle").forEach(select => {
-    const container = select.closest(".dashboard-card");
-    const chartId = container?.querySelector(".chart-object")?.id;
-
+    const chartId = select.dataset.chartId;
+    console.log("chartID:", chartId);  // Debugging output
     if (!chartId) return;
 
-    // Read preference
     const savedType = getCookie(`chartType_${chartId}`);
     if (savedType && select.value !== savedType) {
       select.value = savedType;
     }
 
     select.addEventListener("change", () => {
-      const selectedType = select.value;
-      setCookie(`chartType_${chartId}`, selectedType);
-      rerenderChart(chartId, selectedType);  // You define this logic
+      setCookie(`chartType_${chartId}`, select.value);
+      if (chartId === "port-chart") {
+        updatePortDistributionChartJS(scanDate);
+      } else if (chartId === "os-chart") {
+        updateOSDistributionChartJS(scanDate);
+      }
     });
-
-    // Initial render based on saved or default
-    rerenderChart(chartId, select.value);
   });
 }
-
-
-  // --- Update Port Bubble Chart ---
-  function updatePortBubbleChart(date) {
-    const container = document.getElementById("port-distribution");
-    if (!container) return;
-
-    container.innerHTML = "";
-
-    const obj = document.createElement("object");
-    obj.setAttribute("type", "image/svg+xml");
-    svg.removeAttribute("data");
-    svg.innerHTML = svgUrl;
-    obj.setAttribute("width", "100%");
-    obj.setAttribute("height", "200");
-
-    obj.addEventListener('click', () => {
-      openLightboxWithGraph(`cgi-bin/port-bubbles.py?date=${date}`, "Bubble Chart");
-    });
-
-    container.appendChild(obj);
-  }
 
   // --- On Date Change ---
   scanDateDropdown.addEventListener('change', () => {
@@ -159,12 +117,8 @@ function setupChartToggles() {
         loadSummaryForDate(selectedDate);
         updatePortDistributionChartJS(selectedDate);
         updateOSDistributionChartJS(selectedDate);
-        setupChartToggles();
+        setupChartToggles(selectedDate);
     });
-
-    // updatePortDistributionChart(selectedDate);
-    // updatePortHostGraph(selectedDate);
-    // updateServiceSankey(selectedDate);
   });
 
   // --- Dark Mode Toggle ---
@@ -184,40 +138,41 @@ function setupChartToggles() {
     }
   });
 
-    function openLightboxWithGraph(svgContent, title = "Chart") {
-        const lightbox = document.getElementById("lightbox");
-        const svgContainer = document.getElementById("lightbox-svg");
-        const titleElem = document.getElementById("lightbox-title");
+  function openLightboxWithGraph(svgContent, title = "Chart") {
+      const lightbox = document.getElementById("lightbox");
+      const svgContainer = document.getElementById("lightbox-svg");
+      const titleElem = document.getElementById("lightbox-title");
 
-        if (!lightbox || !svgContainer || !titleElem) {
-        console.warn("Lightbox components missing in DOM.");
-        return;
-        }
+      if (!lightbox || !svgContainer || !titleElem) {
+      console.warn("Lightbox components missing in DOM.");
+      return;
+      }
 
-        // Create a temporary DOM element to parse the SVG string
-        const temp = document.createElement("div");
-        temp.innerHTML = svgContent;
-        const svg = temp.querySelector("svg");
+      // Create a temporary DOM element to parse the SVG string
+      const temp = document.createElement("div");
+      temp.innerHTML = svgContent;
+      const svg = temp.querySelector("svg");
 
-        if (svg) {
-        const vh = Math.round(window.innerHeight * 0.75);
-        svg.setAttribute("height", vh);
-        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      if (svg) {
+      const vh = Math.round(window.innerHeight * 0.75);
+      svg.setAttribute("height", vh);
+      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
 
-        // Center and add top/bottom padding
-        svg.style.display = "block";
-        svg.style.margin = "40px auto";
+      // Center and add top/bottom padding
+      svg.style.display = "block";
+      svg.style.margin = "40px auto";
 
-        svgContainer.innerHTML = "";
-        svgContainer.appendChild(svg);
-        } else {
-        // Fallback: dump raw content if SVG wasn't found
-        svgContainer.innerHTML = svgContent;
-        }
+      svgContainer.innerHTML = "";
+      svgContainer.appendChild(svg);
+      } else {
+      // Fallback: dump raw content if SVG wasn't found
+      svgContainer.innerHTML = svgContent;
+      }
 
-        titleElem.textContent = title;
-        lightbox.classList.remove("hidden");
-    }
+      titleElem.textContent = title;
+      titleElem.style.paddingLeft = "20px";
+      lightbox.classList.remove("hidden");
+  }
 
 
   document.querySelector('.lightbox-close')?.addEventListener('click', () => {
@@ -235,23 +190,6 @@ function setupChartToggles() {
   });
 
   window.openLightboxWithGraph = openLightboxWithGraph;
-
-
-  // --- Service Sankey ---
-  function updateServiceSankey(date) {
-    const obj = document.getElementById("services-graph");
-    if (!obj) return;
-
-    obj.setAttribute("data", `cgi-bin/port-host-sankey.py?date=${date}`);
-    const overlay = obj.parentElement?.querySelector(".svg-click-overlay");
-    if (overlay) {
-      overlay.onclick = () => {
-        openLightboxWithGraph(`cgi-bin/port-host-sankey.py?date=${date}`, "Top 10 Services");
-      };
-    }
-  }
-
-
   let hostsTabInitialized = false;
   const refreshBtn = document.getElementById("refresh-scan");
 
@@ -285,7 +223,7 @@ function setupChartToggles() {
 
       if (window.initHostsTab) {
         window.hostsTabInitialized = false;
-        initHostsTab();
+        initHostsTab();titleElem.style.paddingLeft = "20px";
       }
     });
   }
@@ -305,17 +243,6 @@ function setupChartToggles() {
 });
 
 
-function loadAndCacheScanData(date) {
-  return fetch(`cgi-bin/get-scan-data.py?date=${date}`)
-    .then(res => res.json())
-    .then(data => {
-      window.cachedScanData = data;
-    })
-    .catch(err => {
-      console.error("Failed to load scan data:", err);
-      window.cachedScanData = null;
-    });
-}
 
 function setCookie(name, value, days = 365) {
   const expires = new Date(Date.now() + days * 864e5).toUTCString();
@@ -328,3 +255,18 @@ function getCookie(name) {
     return parts[0] === name ? decodeURIComponent(parts[1]) : r;
   }, '');
 }
+
+
+function rerenderChart(chartId, selectedType) {
+  switch (chartId) {
+    case 'port-chart':
+      updatePortChartJS(selectedType);
+      break;
+    case 'os-chart':
+      updateOSChartJS(selectedType);
+      break;
+    default:
+      console.warn(`Unknown chartId: ${chartId}`);
+  }
+}
+
